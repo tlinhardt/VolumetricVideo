@@ -12,6 +12,7 @@ class TrilinearUpSampling3D(layers.Layer):
   def __init__(self, size:int=2, **kwargs):
     super(TrilinearUpSampling3D, self).__init__(**kwargs)
     self.interpolator = layers.Conv3DTranspose(1,3,strides=[2,2,2], padding='same',kernel_initializer=MakeKernel)
+    self.interpolator.trainable = False
 
   def call(self,inputs):
     return self.interpolator(inputs)
