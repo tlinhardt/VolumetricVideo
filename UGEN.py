@@ -120,6 +120,10 @@ class UGen(k.Model):
     c1 = self.upsum1([self.interp2(c2),c1])
     return self.out(c1)
 
+  def model(self, shape):
+    x = layers.Input(shape=shape)
+    return k.Model(inputs=x, outputs=self.call(x))
+
   def Residual_Block(self, filters:int, num:int):
     res_skip = k.Sequential(name=f"ResBlockStart_{num}")
     res_skip.add(self.Activation())
