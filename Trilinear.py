@@ -14,7 +14,7 @@ class TrilinearUpSampling3D(layers.Layer):
     self.padding1 = ReflectivePadding3D()
     self.interpolator = layers.Conv3DTranspose(1,3,strides=[2,2,2],padding='valid',kernel_initializer=MakeKernel)
     self.interpolator.trainable = False
-    self.crop = layers.Cropping3D([[2,3],[2,3],[2,3]])
+    self.crop = layers.Cropping3D([[2,3],[2,3],[1,2]])
 
   def call(self,inputs):
     x = self.padding1(inputs)

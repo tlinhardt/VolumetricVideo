@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras as k
 import tensorflow.keras.layers as layers
+from NoiseLayer import NoiseLayer
 
 from Trilinear import TrilinearUpSampling3D
 
@@ -9,7 +10,7 @@ class UGen(k.Model):
   Class that generates the structure of a generator inspired by the modified 
   U-Net as defined by Kayalibay et.al at https://github.com/BRML/CNNbasedMedicalSegmentation
   '''
-  def __init__(self, feature_size:int = 3, init_kernel_count:int = 8, do_batchnorm:bool = True, alpha:float = .5, name='UGen', **kwargs):
+  def __init__(self, feature_size:int = 3, init_kernel_count:int = 8, do_batchnorm:bool = True, alpha:float = .5, stddev:float = .1, name='UGen', **kwargs):
     '''
     Constructor for the structure generator
 
@@ -26,6 +27,7 @@ class UGen(k.Model):
     self.alpha = alpha
     self.fsize = feature_size
     self.kc    = init_kernel_count
+    self.stddev = stddev
 
     self.Activation = lambda name=None: k.Sequential([layers.BatchNormalization(momentum=self.alpha),layers.PReLU()], name=name) if self.do_bn else layers.PReLU(name=name)   
     #tensorflow doesn't have a functional trilinear interpolator so using this for now
@@ -43,21 +45,25 @@ class UGen(k.Model):
     self._act4 = self.Activation(name='Activation_4')
 
     #Ascent
-    self.insert_noise = layers.Concatenate(axis=-1)
+    self.noise4 = NoiseLayer(self.stddev,name='Noise_4')
+    self.insert_noise = layers.Concatenate(axis=1)
 
     self.up3 = self.Up_Block(self.kc*4,self.kc*4,num=3)
     self._act3 = self.Activation(name='Activation_3')
-    self.skip3 = layers.Concatenate(axis=-1,name='Skip_3')
+    self.noise3 = NoiseLayer(self.stddev,name='Noise_3')
+    self.skip3 = layers.Concatenate(axis=1,name='Skip_3')
     self.post_skip3 = self.Post_Skip_Block(self.kc*8, num=3)
     
     self.up2 = self.Up_Block(self.kc*4,self.kc*2,num=2)
     self._act2 = self.Activation(name='Activation_2')
-    self.skip2 = layers.Concatenate(axis=-1,name='Skip_2')
+    self.noise2 = NoiseLayer(self.stddev,name='Noise_2')
+    self.skip2 = layers.Concatenate(axis=1,name='Skip_2')
     self.post_skip2 = self.Post_Skip_Block(self.kc*4, num=2)
 
     self.up1 = self.Up_Block(self.kc*2,self.kc,num=1)
     self._act1 = self.Activation(name='Activation_1')
-    self.skip1 = layers.Concatenate(axis=-1,name='Skip_1')
+    self.noise1 = NoiseLayer(self.stddev,name='Noise_1')
+    self.skip1 = layers.Concatenate(axis=1,name='Skip_1')
     self.post_skip1 = self.Post_Skip_Block(self.kc*2, num=1)
     
     #Combination
@@ -73,7 +79,7 @@ class UGen(k.Model):
 
     self.out = layers.ReLU(name="Final_Activation")
 
-  def call(self, inputs):    
+  def call(self, inputs):
     #Descent
     ab1 = self.conv(inputs)
 
@@ -91,24 +97,24 @@ class UGen(k.Model):
     a = self._act4(ab4)
 
     #Ascent
-    n = tf.random.normal(a.shape)
+    n = self.noise4(a)
     a = self.insert_noise([a,n])
 
     a = self.up3(a)
     ###############
-    n = tf.random.normal(a.shape)
+    n = self.noise3(a)
     a = self.skip3([self._act3(ab3),a,n])
     ps3 = self.post_skip3(a)
     
     a = self.up2(ps3)
     ###############
-    n = tf.random.normal(a.shape)
+    n = self.noise2(a)
     a = self.skip2([self._act2(ab2),a,n])
     ps2 = self.post_skip2(a)
 
     a = self.up1(ps2)
     ###############
-    n = tf.random.normal(a.shape)
+    n = self.noise1(a)
     a = self.skip1([self._act1(ab1),a,n])
     ps1 = self.post_skip1(a)
 
@@ -116,7 +122,8 @@ class UGen(k.Model):
     c3 = self.condenser_3(ps3)
     c2 = self.condenser_2(ps2)
     c1 = self.condenser_1(ps1)
-    c2 = self.upsum2([self.interp3(c3),c2])
+    i3 = self.interp3(c3)
+    c2 = self.upsum2([i3,c2])
     c1 = self.upsum1([self.interp2(c2),c1])
     return self.out(c1)
 
@@ -127,8 +134,8 @@ class UGen(k.Model):
   def Residual_Block(self, filters:int, num:int):
     res_skip = k.Sequential(name=f"ResBlockStart_{num}")
     res_skip.add(self.Activation())
-    res_skip.add(layers.Conv3D(filters=filters,kernel_size=self.fsize,strides=2,padding="same"))
-    
+    res_skip.add(layers.Conv3D(filters=filters,kernel_size=self.fsize,strides=(1,2,2) if num > 2 else 2,padding="same"))
+
     res = k.Sequential(name=f"ResBlockEnd_{num}")
     res.add(self.Activation())
     res.add(layers.Conv3D(filters=filters,kernel_size=self.fsize,padding="same"))
@@ -139,7 +146,7 @@ class UGen(k.Model):
     return k.Sequential([
       layers.Conv3D(filters=f1,kernel_size=1,padding="same"),
       self.Activation(),
-      layers.Conv3DTranspose(filters=f2,strides=2,kernel_size=self.fsize,padding="same"),
+      layers.Conv3DTranspose(filters=f2,strides=(1,2,2) if num > 2 else 2,kernel_size=self.fsize,padding="same"),
       self.Activation()
     ], name=f"UpBlock_{num}")
 
