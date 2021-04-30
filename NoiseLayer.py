@@ -12,10 +12,9 @@ class NoiseLayer(layers.Layer):
     self.mean = mean
     self.stddev=stddev
   def call(self,inputs,training=None):
-    noise = lambda: backend.random_normal( 
+    return backend.random_normal( 
       shape=array_ops.shape(inputs),
       mean=self.mean,
       stddev=self.stddev,
       dtype=inputs.dtype
     )
-    return backend.in_train_phase(noise, inputs, training=training)
