@@ -6,10 +6,11 @@ from NoiseLayer import NoiseLayer
 from functools import partial
 
 class SimpleUGen(k.Model):
-  def __init__(self, channels=5, kernel_size=3, noise_stddev=.1, do_batch_norm:bool=False, batch_norm_alpha=.5, name='SimpleU',**kwargs):
+  def __init__(self, channels=5, kernel_size=3, noise_mean=0, noise_stddev=.1, do_batch_norm:bool=False, batch_norm_alpha=.5, name='SimpleU',**kwargs):
     super(SimpleUGen, self).__init__(name=name, **kwargs)
     self.channels = channels
     self.kernel_size = kernel_size
+    self.noise_mean = noise_mean
     self.noise_stddev = noise_stddev
     self.batch_norm_alpha = batch_norm_alpha
     self.do_batch_norm = do_batch_norm
@@ -22,7 +23,7 @@ class SimpleUGen(k.Model):
     Conv = partial(layers.Conv3D,kernel_size=self.kernel_size,strides=2,padding='same')
     DeConv = partial(layers.Conv3DTranspose,kernel_size=self.kernel_size,strides=2,padding='same')
     Concat = partial(layers.Concatenate,axis=1)
-    Noise = partial(NoiseLayer,stddev=self.noise_stddev)
+    Noise = partial(NoiseLayer,mean=self.noise_mean,stddev=self.noise_stddev)
 
     i = iter(range(4))
     self.DownConv = [
