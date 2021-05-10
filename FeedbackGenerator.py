@@ -59,6 +59,6 @@ class FeedbackGenerator(SimpleUGen):
       #print(tf.convert_to_tensor(preds[:,i,...],np.float32))
       gradients = tape.gradient(loss, trainable_vars)
       self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-      self.compiled_metrics.update_state(y, tf.convert_to_tensor(pred,np.float32))
+      self.compiled_metrics.update_state(y, pred)
 
     return {m.name: m.result() for m in self.metrics}
