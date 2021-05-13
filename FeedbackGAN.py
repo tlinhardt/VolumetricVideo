@@ -21,52 +21,63 @@ class FeedbackGAN(k.Model):
     self.Failing = k.metrics.FalseNegatives(name='discriminator_failing_metric')
 
   def train_step(self,data):
-    y,_ = data
+    full,_ = data
+    samples = full.shape[0]
 
-    x = tf.slice(y,[0,0,0,0,0],[-1,y.shape[1]-1,-1,-1,-1])
-
-    samples = y.shape[0]
-
-    D_ones = tf.ones( (samples,),dtype=tf.dtypes.float32)
-    G_ones = tf.ones( (samples,),dtype=tf.dtypes.float32)
-    G_zeros = tf.zeros( (samples,),dtype=tf.dtypes.float32)
+    D_ones =   tf.ones( (samples,) ,dtype=tf.dtypes.float32)
+    G_ones =   tf.ones( (samples,) ,dtype=tf.dtypes.float32)
+    G_zeros = tf.zeros( (samples,) ,dtype=tf.dtypes.float32)
+        
+    x = tf.slice(full,[0,0,0,0,0],[-1,self.channels,-1,-1,-1])
+    y = tf.slice(full,[0,0,0,0,0],[-1,self.channels+1,-1,-1,-1])
     
     self.G.trainable = False    
     self.D.trainable = True    
     #Discriminator on Real Data:
     with tf.GradientTape() as tape:
       pred = self.D(y)
-      loss = self.compiled_loss(D_ones, pred, regularization_losses=self.losses)    
-    self._descent(tape, loss)
+      loss = self.compiled_loss(D_ones * .9, pred, regularization_losses=self.losses)
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
 
     self.Failing.update_state(D_ones, pred)
 
     #Discriminator on Generated Data:
     with tf.GradientTape() as tape:
       pred = self(x)
-      loss = self.compiled_loss(G_zeros, pred, regularization_losses=self.losses) 
-    self._descent(tape, loss)
+      loss = self.compiled_loss(G_zeros, pred, regularization_losses=self.losses)
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
     
     self.G.trainable = True
     self.D.trainable = False
+      
     #Generator
-    with tf.GradientTape() as tape:
-      pred = self(x)
-      loss = self.compiled_loss(G_ones, pred, regularization_losses=self.losses)
-    self._descent(tape, loss)
+    for i in range(samples-self.channels):
+      with tf.GradientTape() as tape:
+        pred = self(x)
+        loss = self.compiled_loss(G_ones, pred, regularization_losses=self.losses) * i
+      trainable_vars = self.trainable_variables
+      gradients = tape.gradient(loss, trainable_vars)
+      self.g_optimizer.apply_gradients(zip(gradients, trainable_vars))
 
-    self.Tricking.update_state(G_zeros, pred)
+      self.Tricking.update_state(G_zeros, pred)
+
+      #append next frame for feedback
+      g = self.G(x)      
+      x = tf.concat([tf.slice(x,[0,1,0,0,0],[-1,-1,-1,-1,-1]),g],1)
 
     return {m.name: m.result() for m in self.metrics}
 
   @property
   def Generator(self): return self.G
 
-  def _descent(self,tape, loss):
-    #compute gradients
-    trainable_vars = self.trainable_variables
-    gradients = tape.gradient(loss, trainable_vars)
-    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-
   def call(self,inputs):
     return self.D(self.Concat([inputs,self.G(inputs)]))
+
+  def compile(self, g_optimizer, d_optimizer,**kwargs):
+    kwargs['optimizer'] = d_optimizer
+    self.g_optimizer = g_optimizer
+    super(FeedbackGAN,self).compile(**kwargs)
