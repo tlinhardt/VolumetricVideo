@@ -7,6 +7,10 @@ from tensorflow.python.ops import array_ops
 import numpy as np
 
 class NoiseLayer(layers.Layer):
+  '''
+  Layer that generates a tensor of Gaussian noise the same shape as the input. 
+  Does not use the input data in any way.
+  '''
   def __init__(self,mean=0,stddev=.1,**kwargs):
     super(NoiseLayer, self).__init__(**kwargs)
     self.mean = mean
