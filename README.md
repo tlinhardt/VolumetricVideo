@@ -9,6 +9,7 @@ PIL
 SimpleITK  
 numpy  
 matplotlib  
+CUDA, cuDNN and CUDA/cuDNN compatible graphics card
 
 ## Setup Environment
 Data is the [Automated Cardiac Diagnosis Challenge (ACDC)​ MICCAI challenge 2017​ data set](https://www.creatis.insa-lyon.fr/Challenge/acdc/databases.html)
